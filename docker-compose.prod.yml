@@ -1,0 +1,12 @@
+version: '3.7'
+
+services:
+  memo_monitor:
+    build: .
+    command:  sleep 10000
+    #volumes:
+    #  - .:/usr/src/app/GoldStandardWeb
+    #
+    volumes:
+      - ~/data_dir:/usr/src/app/data_dir
+

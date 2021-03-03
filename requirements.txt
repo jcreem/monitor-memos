@@ -1,0 +1,6 @@
+termcolor
+requests
+BeautifulSoup4
+websocket-client
+html5lib
+lxml
