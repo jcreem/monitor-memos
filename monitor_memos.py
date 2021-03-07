@@ -15,6 +15,7 @@ import requests
 import json 
 import time
 import sys
+import re
 
 import json
 from datetime import datetime
@@ -36,6 +37,32 @@ def handler(signal_received, frame):
         monitor.flush_json_debug_capture()
     exit(0)
 
+
+
+_urlfinderregex = re.compile(r'http([^\.\s]+\.[^\.\s]*)+[^\.\s]{2,}')
+
+def linkify(text, maxlinklength=255):
+    def replacewithlink(matchobj):
+        url = matchobj.group(0)
+        text = str(url)
+        if text.startswith('http://'):
+            text = text.replace('http://', '', 1)
+        elif text.startswith('https://'):
+            text = text.replace('https://', '', 1)
+
+        if text.startswith('www.'):
+            text = text.replace('www.', '', 1)
+
+        if len(text) > maxlinklength:
+            halflength = maxlinklength / 2
+            text = text[0:halflength] + '...' + text[len(text) - halflength:]
+
+        return '<a class="comurl" href="' + url + '" target="_blank" rel="nofollow">' + text + '</a>'
+
+    if text != None and text != '':
+        return _urlfinderregex.sub(replacewithlink, text)
+    else:
+        return ''
 
 
 class MemoUser(object):
@@ -109,12 +136,15 @@ class MemoMonitor(object):
         self.html_history_len = 5
         self.memo_history = memo_history
 
-        try:
-            if memo_history is not None:
+        #try:
+        if memo_history is not None:
                 with open(self.memo_history) as f:
                     self.filtered_memo_list = json.load(f)
-        except:
-            print("No memo history found")
+
+        self.create_html_from_memo_list()
+
+        #except:
+        #    print("No memo history found")
 
         if replay:
             with open(self.debug_json_data_filename) as f:
@@ -127,6 +157,40 @@ class MemoMonitor(object):
             with open(self.debug_json_data_filename, 'w') as fp:
                 json.dump(self.debug_memo_capture, fp)
 
+    def create_html_from_memo_list(self):
+        with open(self.html_filename,"w") as file:
+            file.write("<html><body>\n")
+            file.write('<div class="divMemoTable">')
+            file.write('<div class="divMemoTableBody">')
+            
+            for a_memo in reversed(self.filtered_memo_list):
+
+                if a_memo['addr'] not in Memousers:
+                    new_user = MemoUser(a_memo['addr'])
+                    Memousers[a_memo['addr']] = new_user
+
+                file.write('<div class="divMemoTableRow">')
+
+                file.write('<div class="divMemoTableCell">')
+                file.write("<img src=" + Memousers[a_memo['addr']].get_profile_pic_url() + ' width=32 align="left">')
+                file.write("</div>") # end divMemoTableCell
+
+                file.write('<div class="divMemoTableCell">')
+                file.write(Memousers[a_memo['addr']].get_username())
+                file.write(" ")
+
+                the_time = datetime.utcfromtimestamp(a_memo['time']).strftime('%Y-%m-%d %H:%M:%S')
+                file.write(the_time)
+                file.write("<br>")
+                file.write(linkify(a_memo['memo']))
+                file.write("<br>\n")
+                file.write("</div>") # end divMemoTableCell                    
+                file.write("</div>") # end divMemoTableRow
+
+            file.write("</div>") # end divMemoableBody
+            file.write("</div>") # end divMemoTable
+            file.write("</html></body>\n")
+
 
     def filtered_add_to_html(self, time, memo, addr):
         ''' This class maintains an html file of the last N memos. This funciton adds the given
@@ -134,7 +198,7 @@ class MemoMonitor(object):
 
         if (self.html_filename is None) or (self.addr is not None and addr != self.addr):
             return
-            
+
         try:
             self.filtered_memo_list.append({'time' : time,
                                             'memo' : memo,
@@ -142,38 +206,8 @@ class MemoMonitor(object):
 
             self.filtered_memo_list = self.filtered_memo_list[-1 * (self.html_history_len):]
 
-            with open(self.html_filename,"w") as file:
-                file.write("<html><body>\n")
-                file.write('<div class="divMemoTable">')
-                file.write('<div class="divMemoTableBody">')
-                
-                for a_memo in reversed(self.filtered_memo_list):
+            self.create_html_from_memo_list()
 
-                    if a_memo['addr'] not in Memousers:
-                        new_user = MemoUser(a_memo['addr'])
-                        Memousers[a_memo['addr']] = new_user
-
-                    file.write('<div class="divMemoTableRow">')
-
-                    file.write('<div class="divMemoTableCell">')
-                    file.write("<img src=" + Memousers[a_memo['addr']].get_profile_pic_url() + ' width=32 align="left">')
-                    file.write("</div>") # end divMemoTableCell
-
-                    file.write('<div class="divMemoTableCell">')
-                    file.write(Memousers[addr].get_username())
-                    file.write(" ")
-
-                    the_time = datetime.utcfromtimestamp(a_memo['time']).strftime('%Y-%m-%d %H:%M:%S')
-                    file.write(the_time)
-                    file.write("<br>")
-                    file.write(a_memo['memo'])
-                    file.write("<br>\n")
-                    file.write("</div>") # end divMemoTableCell                    
-                    file.write("</div>") # end divMemoTableRow
-
-                file.write("</div>") # end divMemoableBody
-                file.write("</div>") # end divMemoTable
-                file.write("</html></body>\n")
         except:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             print("*** print_tb:")
